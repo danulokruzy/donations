@@ -22,17 +22,15 @@ type CheckData = {
 function formatRemaining(ms: number) {
   if (ms <= 0) return "00:00";
   const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60)
-    .toString()
-    .padStart(2, "0");
+  const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
   const seconds = (totalSeconds % 60).toString().padStart(2, "0");
   return `${minutes}:${seconds}`;
 }
 
 function channelLabel(channel: CheckData["channel"]) {
-  if (channel === "UAH") return "UAH";
-  if (channel === "CRYPTOBOT") return "CryptoBOT";
-  return "TonPay";
+  if (channel === "UAH") return "🏦 UAH (Monobank)";
+  if (channel === "CRYPTOBOT") return "🤖 CryptoBOT (USDT)";
+  return "💎 TON";
 }
 
 type VerifyResponse = {
@@ -73,7 +71,28 @@ export default function CheckPage({ params }: { params: { id: string } }) {
     return formatRemaining(new Date(check.expiresAt).getTime() - now);
   }, [check, now]);
 
-  const showButtons = check?.status === "PENDING";
+  const remainingMs = useMemo(() => {
+    if (!check) return 0;
+    return Math.max(0, new Date(check.expiresAt).getTime() - now);
+  }, [check, now]);
+
+  const isExpired = remainingMs <= 0 && check?.status === "PENDING";
+  const showButtons = check?.status === "PENDING" && !isExpired;
+  const isPaid = check?.status === "PAID";
+
+  useEffect(() => {
+    if (isExpired) {
+      setInfoMessage("Час вийшов. Повертаємось назад...");
+      const t = setTimeout(() => router.push("/"), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [isExpired, router]);
+
+  useEffect(() => {
+    if (isPaid) {
+      setInfoMessage("Оплату підтверджено! Дякуємо за донат.");
+    }
+  }, [isPaid]);
 
   async function verifyCheck(options?: { allowAnonymousOnFail?: boolean }) {
     if (!check) return;
@@ -104,13 +123,13 @@ export default function CheckPage({ params }: { params: { id: string } }) {
     const result = data.data as VerifyResponse;
     if (result.status === "paid" || result.status === "already_processed") {
       setIsError(false);
-      setInfoMessage("Оплату підтверджено.");
+      setInfoMessage("Оплату підтверджено!");
     } else if (result.status === "anonymous") {
       setIsError(false);
       setInfoMessage("Донат зараховано як анонімний.");
     } else {
       setIsError(false);
-      setInfoMessage("Оплату ще не знайдено. Спробуйте трохи пізніше.");
+      setInfoMessage("Оплату ще не знайдено. Спробуйте пізніше.");
     }
 
     await loadCheck();
@@ -137,71 +156,62 @@ export default function CheckPage({ params }: { params: { id: string } }) {
     router.push("/");
   }
 
+  const timerColor = remainingMs > 120000 ? "text-amber-200" : remainingMs > 30000 ? "text-orange-300" : "text-red-400";
+
   return (
-    <main className="coffee-bg min-h-screen px-3 py-4 text-[#f4ede0] sm:px-4">
-      <div className="mx-auto max-w-3xl">
-        <div className="dashboard-card p-5">
-          <h1 className="text-2xl font-semibold">Очікування оплати</h1>
-          <p className="mt-1 text-sm text-amber-50/75">
-            Чек діє 10 хвилин. Після оплати натисни «Перевірити».
-          </p>
+    <main className="coffee-bg min-h-screen px-3 py-4 text-[#f4ede0] sm:px-6">
+      <div className="mx-auto max-w-2xl">
+        {/* Timer Header */}
+        <div className="dashboard-card overflow-hidden p-6 text-center">
+          <p className="text-xs uppercase tracking-[0.25em] text-amber-50/60">Час на оплату</p>
+          <p className={`mt-2 text-6xl font-bold tabular-nums ${timerColor}`}>{remaining}</p>
+          {check && (
+            <p className="mt-2 text-sm text-amber-50/60">
+              {channelLabel(check.channel)} &middot; {check.amountLabel}
+              {check.channel !== "UAH" && (
+                <span className="ml-1 text-amber-50/40">(≈ {check.amountUah.toFixed(2)} грн)</span>
+              )}
+            </p>
+          )}
         </div>
 
+        {/* Check Details */}
         <section className="dashboard-card mt-4 p-5">
           {!check ? (
-            <p className="text-sm text-amber-50/75">{infoMessage || "Завантаження..."}</p>
+            <p className="text-sm text-amber-50/70">{infoMessage || "Завантаження..."}</p>
           ) : (
             <>
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-xl border border-white/10 bg-black/25 p-3">
-                  <p className="text-xs text-amber-50/70">Ім&apos;я</p>
-                  <p className="mt-1">{check.donorName}</p>
+                <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-amber-50/50">Ім&apos;я</p>
+                  <p className="mt-1 font-medium">{check.donorName}</p>
                 </div>
-                <div className="rounded-xl border border-white/10 bg-black/25 p-3">
-                  <p className="text-xs text-amber-50/70">Код чека</p>
-                  <p className="mt-1">{check.code}</p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-black/25 p-3">
-                  <p className="text-xs text-amber-50/70">Канал</p>
-                  <p className="mt-1">{channelLabel(check.channel)}</p>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-black/25 p-3">
-                  <p className="text-xs text-amber-50/70">Сума</p>
-                  <p className="mt-1">{check.amountLabel}</p>
-                  {check.channel !== "UAH" ? (
-                    <p className="text-xs text-amber-50/70">≈ {check.amountUah.toFixed(2)} грн</p>
-                  ) : null}
+                <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-amber-50/50">Сума</p>
+                  <p className="mt-1 font-medium">{check.amountLabel}</p>
                 </div>
               </div>
 
-              <div className="mt-3 rounded-xl border border-white/10 bg-black/25 p-3">
-                <p className="text-xs text-amber-50/70">Повідомлення</p>
-                <p className="mt-1">{check.message || "Без повідомлення"}</p>
-                {check.youtubeUrl ? (
-                  <p className="mt-2 text-xs text-amber-50/80">YouTube: {check.youtubeUrl}</p>
-                ) : null}
-                {check.voiceUrl ? (
-                  <p className="mt-1 text-xs text-amber-50/80">Голос: {check.voiceUrl}</p>
-                ) : null}
-              </div>
+              {check.message && (
+                <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-amber-50/50">Повідомлення</p>
+                  <p className="mt-1 text-sm">{check.message}</p>
+                </div>
+              )}
 
-              <div className="mt-4 rounded-xl border border-amber-200/30 bg-amber-100/10 p-4 text-center">
-                <p className="text-xs uppercase tracking-[0.2em] text-amber-100/80">Час на оплату</p>
-                <p className="mt-2 text-5xl font-bold">{remaining}</p>
-              </div>
-
-              <div className="mt-4 flex flex-wrap gap-2">
+              {/* Action Buttons */}
+              <div className="mt-5 grid gap-2 sm:grid-cols-3">
                 <a
                   href={showButtons ? check.payUrl : "#"}
                   target="_blank"
                   rel="noreferrer"
-                  onClick={(event) => {
-                    if (!showButtons) event.preventDefault();
+                  onClick={(e) => {
+                    if (!showButtons) e.preventDefault();
                   }}
-                  className={`rounded-xl border px-4 py-2 text-sm ${
+                  className={`flex h-12 items-center justify-center rounded-xl text-sm font-semibold transition ${
                     showButtons
-                      ? "border-white/20 hover:bg-white/10"
-                      : "pointer-events-none border-white/10 opacity-60"
+                      ? "bg-gradient-to-r from-amber-400 to-amber-500 text-[#2b1d13] shadow-lg shadow-amber-500/20 hover:from-amber-300 hover:to-amber-400"
+                      : "border border-white/10 bg-black/20 text-amber-50/40"
                   }`}
                 >
                   Оплатити
@@ -210,36 +220,70 @@ export default function CheckPage({ params }: { params: { id: string } }) {
                   type="button"
                   onClick={() => verifyCheck()}
                   disabled={processing || !showButtons}
-                  className="rounded-xl bg-amber-400 px-4 py-2 text-sm font-semibold text-[#2b1d13] transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex h-12 items-center justify-center rounded-xl border border-emerald-400/40 bg-emerald-500/15 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/25 disabled:opacity-50"
                 >
                   Перевірити
                 </button>
-                {check.channel === "UAH" ? (
-                  <button
-                    type="button"
-                    onClick={() => verifyCheck({ allowAnonymousOnFail: true })}
-                    disabled={processing || !showButtons}
-                    className="rounded-xl border border-amber-300/40 px-4 py-2 text-sm text-amber-100 hover:bg-amber-100/10 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    Відправити анонімно
-                  </button>
-                ) : null}
                 <button
                   type="button"
                   onClick={cancelCheckAndBack}
                   disabled={processing}
-                  className="rounded-xl border border-red-300/40 px-4 py-2 text-sm text-red-100 hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex h-12 items-center justify-center rounded-xl border border-red-400/30 bg-red-500/10 text-sm text-red-200 transition hover:bg-red-500/20 disabled:opacity-50"
                 >
-                  Скасувати чек (назад)
+                  Скасувати (назад)
                 </button>
               </div>
 
-              <p className="mt-3 text-sm text-amber-50/75">Статус: {check.status}</p>
-              {infoMessage ? (
-                <p className={`mt-2 text-sm ${isError ? "text-red-300" : "text-emerald-300"}`}>
+              {check.channel === "UAH" && showButtons && (
+                <button
+                  type="button"
+                  onClick={() => verifyCheck({ allowAnonymousOnFail: true })}
+                  disabled={processing}
+                  className="mt-2 w-full rounded-xl border border-amber-300/30 bg-amber-400/10 py-2.5 text-sm text-amber-200 transition hover:bg-amber-400/15 disabled:opacity-50"
+                >
+                  Відправити анонімно (без коду)
+                </button>
+              )}
+
+              {/* Code Instructions for UAH */}
+              {check.channel === "UAH" && showButtons && (
+                <div className="mt-4 rounded-xl border border-amber-300/25 bg-amber-400/8 p-4">
+                  <p className="text-sm font-semibold text-amber-200">Важливо!</p>
+                  <p className="mt-1 text-sm text-amber-50/70">
+                    При оплаті через Monobank обов&apos;язково вкажіть код чека у коментарі до переказу:
+                  </p>
+                  <div className="mt-2 flex items-center gap-2 rounded-lg border border-amber-300/30 bg-black/30 px-4 py-3">
+                    <span className="font-mono text-lg font-bold text-amber-200">{check.code}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(check.code);
+                        setInfoMessage("Код скопійовано!");
+                        setIsError(false);
+                      }}
+                      className="ml-auto rounded-lg border border-white/15 px-2 py-1 text-xs hover:bg-white/10"
+                    >
+                      Копіювати
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Status */}
+              <div className="mt-4 flex items-center gap-2">
+                <span
+                  className={`inline-block h-2 w-2 rounded-full ${
+                    check.status === "PAID" ? "bg-emerald-400" : check.status === "PENDING" ? "bg-amber-400 animate-pulse" : "bg-red-400"
+                  }`}
+                />
+                <span className="text-sm text-amber-50/70">Статус: {check.status}</span>
+              </div>
+
+              {infoMessage && (
+                <p className={`mt-3 rounded-xl p-3 text-sm ${isError ? "bg-red-500/10 text-red-300" : "bg-emerald-500/10 text-emerald-300"}`}>
                   {infoMessage}
                 </p>
-              ) : null}
+              )}
             </>
           )}
         </section>

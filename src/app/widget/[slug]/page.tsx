@@ -4,8 +4,12 @@ import { useEffect, useState } from "react";
 
 type Params = { slug: string };
 
+type TopDonorRow = { donorName: string; totalUah: number };
+type DonationRow = { id: string; donorName: string; amountUah: number; message: string };
+type BattleData = { top3: TopDonorRow[]; entries: DonationRow[] };
+
 export default function WidgetPage({ params }: { params: Params }) {
-  const [items, setItems] = useState<any>(null);
+  const [items, setItems] = useState<TopDonorRow[] | DonationRow[] | BattleData | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -27,7 +31,7 @@ export default function WidgetPage({ params }: { params: Params }) {
   }, [params.slug]);
 
   if (params.slug === "top-donors") {
-    const rows: Array<{ donorName: string; totalUah: number }> = Array.isArray(items) ? items : [];
+    const rows: TopDonorRow[] = Array.isArray(items) ? (items as TopDonorRow[]) : [];
     return (
       <main className="widget-shell p-4">
         <h1 className="widget-title">Топ 3 донатерів</h1>
@@ -43,12 +47,15 @@ export default function WidgetPage({ params }: { params: Params }) {
   }
 
   if (params.slug === "fake-battle") {
-    const battle = items?.top3 ? items : { top3: [], entries: [] };
+    const battle: BattleData =
+      items && !Array.isArray(items) && "top3" in items
+        ? (items as BattleData)
+        : { top3: [], entries: [] };
     return (
       <main className="widget-shell p-4">
         <h1 className="widget-title">Fake battle</h1>
         <div className="mt-3 space-y-2">
-          {battle.top3.map((row: { donorName: string; totalUah: number }, index: number) => (
+          {battle.top3.map((row, index) => (
             <div key={row.donorName} className="widget-item">
               {index + 1}. {row.donorName} — {row.totalUah.toFixed(2)} грн
             </div>
@@ -58,9 +65,7 @@ export default function WidgetPage({ params }: { params: Params }) {
     );
   }
 
-  const rows: Array<{ id: string; donorName: string; amountUah: number; message: string }> = Array.isArray(items)
-    ? items
-    : [];
+  const rows: DonationRow[] = Array.isArray(items) ? (items as DonationRow[]) : [];
 
   return (
     <main className="widget-shell p-4">
