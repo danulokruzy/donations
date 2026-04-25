@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --coffee-900: #0b0a09;
+  --coffee-800: #151110;
+  --coffee-700: #241a16;
+  --coffee-100: #f4ede0;
+  --coffee-accent: #e9b35a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--coffee-900);
+  color: var(--coffee-100);
+}
+
+.coffee-bg {
+  position: relative;
+  isolation: isolate;
+}
+
+.coffee-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(180deg, rgba(11, 10, 9, 0.88) 0%, rgba(11, 10, 9, 0.94) 60%, rgba(11, 10, 9, 0.98) 100%),
+    radial-gradient(circle at 80% 20%, rgba(233, 179, 90, 0.16), transparent 55%),
+    url("/background-coffee-shop.jpg") center / cover no-repeat;
+}
+
+.dashboard-card {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 20px;
+  background: linear-gradient(160deg, rgba(17, 12, 10, 0.82), rgba(10, 9, 8, 0.82));
+  backdrop-filter: blur(4px);
+}
+
+.input-dark {
+  height: 44px;
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0 12px;
+  color: var(--coffee-100);
+  outline: none;
+}
+
+.input-dark:focus {
+  border-color: rgba(233, 179, 90, 0.85);
+}
+
+.trigger-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.24);
+  padding: 10px 12px;
+  font-size: 0.85rem;
+}
+
+.widget-shell {
+  min-height: 100vh;
+  background: transparent;
+  color: #fff8ef;
+}
+
+.widget-title {
+  display: inline-flex;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(0, 0, 0, 0.4);
+  padding: 6px 14px;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.widget-item {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.36);
+  padding: 10px 12px;
+}
