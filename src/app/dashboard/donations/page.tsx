@@ -26,41 +26,36 @@ type DonationItem = {
   createdAt: string;
 };
 
-type FakeItem = {
-  id: string;
-  donorName: string;
-  amountUah: number;
-  message: string;
-  createdAt: string;
-};
+function channelIcon(ch: string) {
+  if (ch === "UAH") return "🏦";
+  if (ch === "CRYPTOBOT") return "🤖";
+  if (ch === "TONPAY") return "💎";
+  return "💸";
+}
 
 export default function DonationsPage() {
   const [checks, setChecks] = useState<CheckItem[]>([]);
   const [donations, setDonations] = useState<DonationItem[]>([]);
-  const [fakeDonations, setFakeDonations] = useState<FakeItem[]>([]);
-  const [topFake, setTopFake] = useState<Array<{ donorName: string; totalUah: number }>>([]);
   const [message, setMessage] = useState("");
-  const [fakeName, setFakeName] = useState("Настя");
-  const [fakeAmount, setFakeAmount] = useState(50);
-  const [fakeMessage, setFakeMessage] = useState("Донат батл!");
+
+  const [manualName, setManualName] = useState("");
+  const [manualAmount, setManualAmount] = useState(50);
+  const [manualMessage, setManualMessage] = useState("");
+  const [manualChannel, setManualChannel] = useState("UAH");
+  const [addingManual, setAddingManual] = useState(false);
+
+  const [filter, setFilter] = useState<"all" | "real" | "fake">("all");
 
   useEffect(() => {
     void reload();
   }, []);
 
   async function reload() {
-    const [donationsRes, fakeRes] = await Promise.all([
-      fetch("/api/donations", { cache: "no-store" }),
-      fetch("/api/fake-donations", { cache: "no-store" }),
-    ]);
-    const [donationsJson, fakeJson] = await Promise.all([donationsRes.json(), fakeRes.json()]);
-    if (donationsJson.ok) {
-      setChecks(donationsJson.data.checks);
-      setDonations(donationsJson.data.donations);
-      setFakeDonations(donationsJson.data.fakeDonations);
-    }
-    if (fakeJson.ok) {
-      setTopFake(fakeJson.data.top3 || []);
+    const res = await fetch("/api/donations", { cache: "no-store" });
+    const data = await res.json();
+    if (data.ok) {
+      setChecks(data.data.checks);
+      setDonations(data.data.donations);
     }
   }
 
@@ -88,131 +83,143 @@ export default function DonationsPage() {
     });
     const data = await response.json();
     if (!response.ok || !data.ok) {
-      setMessage(data.error || "Не вдалося підтвердити оплату.");
+      setMessage(data.error || "Не вдалося підтвердити.");
       return;
     }
-    setMessage(
-      anonymous
-        ? "Платіж записано як анонімний (без тригерів)."
-        : "Оплату підтверджено, тригери запущено."
-    );
+    setMessage(anonymous ? "Анонімний платіж записано." : "Оплату підтверджено.");
     await reload();
   }
 
-  async function addFake(event: FormEvent) {
-    event.preventDefault();
-    const response = await fetch("/api/fake-donations", {
+  async function addManualDonation(e: FormEvent) {
+    e.preventDefault();
+    if (!manualName.trim()) {
+      setMessage("Вкажіть ім'я.");
+      return;
+    }
+    setAddingManual(true);
+    const res = await fetch("/api/donations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        donorName: fakeName,
-        amountUah: fakeAmount,
-        message: fakeMessage,
+        donorName: manualName.trim(),
+        amountUah: manualAmount,
+        message: manualMessage.trim(),
+        channel: manualChannel,
       }),
     });
-    const data = await response.json();
-    if (!response.ok || !data.ok) {
-      setMessage(data.error || "Не вдалося додати фейк-донат.");
+    const data = await res.json();
+    setAddingManual(false);
+    if (!res.ok || !data.ok) {
+      setMessage(data.error || "Не вдалося створити донат.");
       return;
     }
+    setMessage("Донат створено вручну.");
+    setManualMessage("");
     await reload();
   }
 
-  async function deleteFake(id: string) {
-    const response = await fetch(`/api/fake-donations/${id}`, { method: "DELETE" });
-    const data = await response.json();
-    if (!response.ok || !data.ok) {
-      setMessage(data.error || "Не вдалося видалити фейк-донат.");
-      return;
-    }
-    await reload();
-  }
+  const filteredDonations = useMemo(() => {
+    if (filter === "real") return donations.filter((d) => !d.isFake);
+    if (filter === "fake") return donations.filter((d) => d.isFake);
+    return donations;
+  }, [donations, filter]);
 
-  async function generateBattle() {
-    const players = ["Настя", "Влад"];
-    for (let i = 0; i < 8; i += 1) {
-      const donorName = players[i % 2];
-      const amountUah = 20 + Math.floor(Math.random() * 200);
-      await fetch("/api/fake-donations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          donorName,
-          amountUah,
-          message: `Battle #${i + 1}`,
-          battleTag: "nastya-vs-vlad",
-        }),
-      });
-    }
-    setMessage("Батл згенеровано.");
-    await reload();
-  }
+  const totalReal = useMemo(() => {
+    return donations.filter((d) => !d.isFake).reduce((sum, d) => sum + d.amountUah, 0);
+  }, [donations]);
 
   const top3Real = useMemo(() => {
     const map = new Map<string, number>();
-    for (const donation of donations) {
-      map.set(donation.donorName, (map.get(donation.donorName) ?? 0) + donation.amountUah);
+    for (const d of donations.filter((d) => !d.isFake)) {
+      map.set(d.donorName, (map.get(d.donorName) ?? 0) + d.amountUah);
     }
     return Array.from(map.entries())
       .map(([donorName, totalUah]) => ({ donorName, totalUah }))
       .sort((a, b) => b.totalUah - a.totalUah)
-      .slice(0, 3);
+      .slice(0, 5);
   }, [donations]);
 
   return (
     <main className="space-y-4">
       <section className="dashboard-card p-5">
-        <h1 className="text-2xl font-semibold">Donations</h1>
-        <p className="mt-1 text-sm text-amber-50/75">
-          Керування активними чеками, підтвердженнями оплат та фейк-батлами.
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold">Donations</h1>
+            <p className="mt-1 text-sm text-amber-50/70">
+              Єдиний журнал усіх донатів, чеків та платежів.
+            </p>
+          </div>
+          <div className="rounded-xl border border-amber-300/30 bg-amber-400/10 px-4 py-2 text-center">
+            <p className="text-xl font-bold text-amber-200">{totalReal.toFixed(2)} грн</p>
+            <p className="text-xs text-amber-50/60">Всього (реальні)</p>
+          </div>
+        </div>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
+      {/* Stats + Active Checks Row */}
+      <section className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
+        {/* Top Donors */}
         <article className="dashboard-card p-5">
-          <h2 className="text-lg font-semibold">Активні чеки</h2>
-          <div className="mt-3 space-y-3">
+          <h2 className="text-base font-semibold">Топ донатерів</h2>
+          <div className="mt-3 space-y-2">
+            {top3Real.length === 0 ? (
+              <p className="text-sm text-amber-50/60">Ще немає донатів.</p>
+            ) : (
+              top3Real.map((row, i) => (
+                <div key={row.donorName} className="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 p-2.5 text-sm">
+                  <span>
+                    <span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-amber-400/20 text-xs font-bold text-amber-200">
+                      {i + 1}
+                    </span>
+                    {row.donorName}
+                  </span>
+                  <span className="font-semibold text-amber-200">{row.totalUah.toFixed(0)} грн</span>
+                </div>
+              ))
+            )}
+          </div>
+        </article>
+
+        {/* Active Checks */}
+        <article className="dashboard-card p-5">
+          <h2 className="text-base font-semibold">Активні чеки</h2>
+          <div className="mt-3 max-h-[300px] space-y-2 overflow-auto pr-1">
             {checks.length === 0 ? (
-              <p className="text-sm text-amber-50/70">Активних чеків немає.</p>
+              <p className="text-sm text-amber-50/60">Немає активних чеків.</p>
             ) : (
               checks.map((check) => (
-                <div key={check.id} className="rounded-xl border border-white/10 bg-black/25 p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-semibold">{check.code}</p>
-                    <p className="text-xs text-amber-50/70">
+                <div key={check.id} className="rounded-xl border border-white/10 bg-black/20 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span>{channelIcon(check.channel)}</span>
+                      <span className="font-mono text-sm font-semibold">{check.code}</span>
+                    </div>
+                    <span className="text-xs text-amber-50/60">
                       до {new Date(check.expiresAt).toLocaleTimeString()}
-                    </p>
+                    </span>
                   </div>
-                  <p className="mt-1 text-sm">
-                    {check.donorName} • {check.amountLabel}
+                  <p className="mt-1 text-sm text-amber-50/80">
+                    {check.donorName} &mdash; {check.amountLabel}
                   </p>
-                  <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                    <a
-                      href={check.payUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded border border-white/20 px-2 py-1 hover:bg-white/10"
-                    >
-                      Відкрити оплату
-                    </a>
+                  <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
                     <button
                       type="button"
                       onClick={() => verifyCheck(check, false)}
-                      className="rounded border border-emerald-300/40 px-2 py-1 text-emerald-200"
+                      className="rounded-lg bg-emerald-500/20 px-2 py-1 text-emerald-200 hover:bg-emerald-500/30"
                     >
-                      Підтвердити (з кодом)
+                      Підтвердити
                     </button>
                     <button
                       type="button"
                       onClick={() => verifyCheck(check, true)}
-                      className="rounded border border-amber-300/40 px-2 py-1 text-amber-200"
+                      className="rounded-lg bg-amber-500/20 px-2 py-1 text-amber-200 hover:bg-amber-500/30"
                     >
-                      Анонімно без коду
+                      Анонімно
                     </button>
                     <button
                       type="button"
                       onClick={() => cancelCheck(check.id)}
-                      className="rounded border border-red-300/40 px-2 py-1 text-red-200"
+                      className="rounded-lg bg-red-500/20 px-2 py-1 text-red-200 hover:bg-red-500/30"
                     >
                       Скасувати
                     </button>
@@ -222,114 +229,114 @@ export default function DonationsPage() {
             )}
           </div>
         </article>
-
-        <article className="dashboard-card p-5">
-          <h2 className="text-lg font-semibold">Top 3</h2>
-          <p className="mt-2 text-sm text-amber-50/70">Реальні донати</p>
-          <div className="mt-2 space-y-2">
-            {top3Real.length === 0 ? (
-              <p className="text-sm text-amber-50/70">Ще немає донатів.</p>
-            ) : (
-              top3Real.map((row, index) => (
-                <div key={row.donorName} className="rounded-lg border border-white/10 bg-black/25 p-2 text-sm">
-                  {index + 1}. {row.donorName} — {row.totalUah.toFixed(2)} грн
-                </div>
-              ))
-            )}
-          </div>
-          <p className="mt-3 text-sm text-amber-50/70">Фейк батл</p>
-          <div className="mt-2 space-y-2">
-            {topFake.length === 0 ? (
-              <p className="text-sm text-amber-50/70">Ще немає батлу.</p>
-            ) : (
-              topFake.map((row, index) => (
-                <div key={row.donorName} className="rounded-lg border border-white/10 bg-black/25 p-2 text-sm">
-                  {index + 1}. {row.donorName} — {row.totalUah.toFixed(2)} грн
-                </div>
-              ))
-            )}
-          </div>
-        </article>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
-        <article className="dashboard-card p-5">
-          <h2 className="text-lg font-semibold">Останні донати</h2>
-          <div className="mt-3 max-h-[420px] space-y-2 overflow-auto pr-1">
-            {donations.length === 0 ? (
-              <p className="text-sm text-amber-50/70">Поки що порожньо.</p>
-            ) : (
-              donations.map((donation) => (
-                <div key={donation.id} className="rounded-lg border border-white/10 bg-black/25 p-3 text-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p>
-                      {donation.donorName}
-                      {donation.isAnonymous ? " (анонім)" : ""}
-                      {donation.isFake ? " (fake)" : ""}
-                    </p>
-                    <p>{donation.amountUah.toFixed(2)} грн</p>
-                  </div>
-                  <p className="mt-1 text-xs text-amber-50/70">{donation.message || "Без повідомлення"}</p>
-                </div>
-              ))
-            )}
+      {/* Manual Donation Creation */}
+      <section className="dashboard-card p-5">
+        <h2 className="mb-3 text-base font-semibold">Створити донат вручну</h2>
+        <form onSubmit={addManualDonation} className="grid gap-3 md:grid-cols-4">
+          <input
+            value={manualName}
+            onChange={(e) => setManualName(e.target.value)}
+            className="input-dark"
+            placeholder="Ім'я донатера"
+          />
+          <input
+            type="number"
+            min={1}
+            value={manualAmount}
+            onChange={(e) => setManualAmount(Number(e.target.value) || 0)}
+            className="input-dark"
+            placeholder="Сума грн"
+          />
+          <input
+            value={manualMessage}
+            onChange={(e) => setManualMessage(e.target.value)}
+            className="input-dark"
+            placeholder="Повідомлення"
+          />
+          <div className="flex gap-2">
+            <select
+              value={manualChannel}
+              onChange={(e) => setManualChannel(e.target.value)}
+              className="input-dark w-24"
+            >
+              <option value="UAH">UAH</option>
+              <option value="CRYPTOBOT">Crypto</option>
+              <option value="TONPAY">TON</option>
+            </select>
+            <button
+              type="submit"
+              disabled={addingManual}
+              className="rounded-xl bg-amber-400 px-4 py-2 text-sm font-semibold text-[#2b1d13] transition hover:bg-amber-300 disabled:opacity-60"
+            >
+              {addingManual ? "..." : "Додати"}
+            </button>
           </div>
-        </article>
+        </form>
+      </section>
 
-        <article className="dashboard-card p-5">
-          <h2 className="text-lg font-semibold">Фейк-донати та батл</h2>
-          <form onSubmit={addFake} className="mt-3 space-y-2">
-            <input value={fakeName} onChange={(e) => setFakeName(e.target.value)} className="input-dark" placeholder="Ім'я" />
-            <input
-              value={fakeAmount}
-              onChange={(e) => setFakeAmount(Number(e.target.value) || 0)}
-              className="input-dark"
-              type="number"
-              placeholder="Сума"
-            />
-            <input
-              value={fakeMessage}
-              onChange={(e) => setFakeMessage(e.target.value)}
-              className="input-dark"
-              placeholder="Повідомлення"
-            />
-            <div className="flex gap-2">
+      {/* Donations Journal */}
+      <section className="dashboard-card p-5">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-base font-semibold">Журнал донатів</h2>
+          <div className="flex gap-1 rounded-lg border border-white/10 p-0.5">
+            {(["all", "real", "fake"] as const).map((f) => (
               <button
-                type="submit"
-                className="rounded-xl bg-amber-400 px-4 py-2 text-sm font-semibold text-[#2b1d13] transition hover:bg-amber-300"
-              >
-                Додати
-              </button>
-              <button
+                key={f}
                 type="button"
-                onClick={generateBattle}
-                className="rounded-xl border border-white/20 px-4 py-2 text-sm hover:bg-white/5"
+                onClick={() => setFilter(f)}
+                className={`rounded-md px-3 py-1 text-xs transition ${
+                  filter === f ? "bg-amber-400/20 text-amber-200" : "text-amber-50/60 hover:text-amber-50/80"
+                }`}
               >
-                Генерувати battle
+                {f === "all" ? "Всі" : f === "real" ? "Реальні" : "Фейк"}
               </button>
-            </div>
-          </form>
-
-          <div className="mt-3 max-h-[250px] space-y-2 overflow-auto pr-1">
-            {fakeDonations.slice(0, 20).map((item) => (
-              <div key={item.id} className="rounded-lg border border-white/10 bg-black/25 p-2 text-sm">
-                <p>
-                  {item.donorName} — {item.amountUah.toFixed(2)} грн
-                </p>
-                <p className="text-xs text-amber-50/70">{item.message}</p>
-                <button
-                  type="button"
-                  onClick={() => deleteFake(item.id)}
-                  className="mt-1 rounded border border-red-300/40 px-2 py-1 text-xs text-red-200"
-                >
-                  Видалити
-                </button>
-              </div>
             ))}
           </div>
-        </article>
+        </div>
+
+        <div className="max-h-[500px] space-y-2 overflow-auto pr-1">
+          {filteredDonations.length === 0 ? (
+            <p className="py-8 text-center text-sm text-amber-50/50">Поки що порожньо.</p>
+          ) : (
+            filteredDonations.map((d) => (
+              <div key={d.id} className="flex items-start gap-3 rounded-xl border border-white/8 bg-black/20 p-3">
+                <span className="mt-0.5 text-lg">{channelIcon(d.channel)}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold">{d.donorName}</span>
+                    {d.isFake && (
+                      <span className="rounded bg-purple-500/20 px-1.5 py-0.5 text-[10px] text-purple-300">fake</span>
+                    )}
+                    {d.isAnonymous && (
+                      <span className="rounded bg-gray-500/20 px-1.5 py-0.5 text-[10px] text-gray-300">анонім</span>
+                    )}
+                    <span className="ml-auto font-semibold text-amber-200">{d.amountUah.toFixed(2)} грн</span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-amber-50/60">{d.message || "Без повідомлення"}</p>
+                  <p className="mt-1 text-[10px] text-amber-50/40">
+                    {new Date(d.createdAt).toLocaleString()} &middot; {d.amountLabel}
+                  </p>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </section>
-      {message ? <p className="text-sm text-emerald-300">{message}</p> : null}
+
+      {message && (
+        <div className="fixed bottom-4 right-4 z-50 rounded-xl border border-white/15 bg-[#1a1412] px-4 py-3 text-sm shadow-xl">
+          {message}
+          <button
+            type="button"
+            onClick={() => setMessage("")}
+            className="ml-3 text-xs text-amber-50/60 hover:text-amber-50"
+          >
+            ✕
+          </button>
+        </div>
+      )}
     </main>
   );
 }

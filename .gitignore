@@ -1,23 +1,19 @@
-### AL ###
-#Template for AL projects for Dynamics 365 Business Central
-#launch.json folder
-.vscode/
-#Cache folder
-.alcache/
-#Symbols folder
-.alpackages/
-#Snapshots folder
-.snapshots/
-#Testing Output folder
-.output/
-#Extension App-file
+node_modules/
+.next/
+.env
+.env.local
+prisma/dev.db
+prisma/dev.db-journal
+prisma/dev2.db
+prisma/dev2.db-journal
 *.app
-#Rapid Application Development File
+.vscode/
+.alcache/
+.alpackages/
+.snapshots/
+.output/
 rad.json
-#Translation Base-file
 *.g.xlf
-#License-files
 *.bclicense
 *.flf
-#Test results file
 TestResults.xml

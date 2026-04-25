@@ -185,6 +185,19 @@ model FakeDonation {
   @@index([createdAt])
 }
 
+model FakeDonationConfig {
+  id              String  @id @default(cuid())
+  enabled         Boolean @default(false)
+  name1           String  @default("Настя")
+  name2           String  @default("Влад")
+  minPauseSec     Int     @default(10)
+  maxPauseSec     Int     @default(60)
+  minAmountUah    Float   @default(10)
+  maxAmountUah    Float   @default(500)
+  messages        String  @default("[\"Донат!\",\"Підтримка стріму\",\"Слава Україні!\",\"Вперед!\",\"Круто!\"]")
+  updatedAt       DateTime @updatedAt
+}
+
 model WidgetPreset {
   id           String   @id @default(cuid())
   slug         String   @unique
