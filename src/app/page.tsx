@@ -16,6 +16,8 @@ const CHANNELS: Array<{ id: Channel; label: string; hint: string; icon: string }
 
 const QUICK_AMOUNTS_UAH = [25, 50, 100, 250, 500];
 
+const MAX_VOICE_SECONDS = 30;
+
 export default function HomePage() {
   const router = useRouter();
   const [channel, setChannel] = useState<Channel>("uah");
@@ -32,6 +34,40 @@ export default function HomePage() {
   const [voiceSeconds, setVoiceSeconds] = useState(0);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const startedAtRef = useRef<number>(0);
+  const voiceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Restore last name and amount from localStorage
+  useEffect(() => {
+    try {
+      const savedName = localStorage.getItem("donatelko_name");
+      const savedAmount = localStorage.getItem("donatelko_amount");
+      if (savedName) setName(savedName);
+      if (savedAmount) setAmount(Number(savedAmount) || 50);
+
+      // If returning from expired check, restore full form
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("restore") === "1") {
+        const savedForm = localStorage.getItem("donatelko_form");
+        if (savedForm) {
+          const form = JSON.parse(savedForm);
+          if (form.name) setName(form.name);
+          if (form.amount) setAmount(Number(form.amount));
+          if (form.message) setMessage(form.message);
+          if (form.youtubeUrl) setYoutubeUrl(form.youtubeUrl);
+          if (form.channel) setChannel(form.channel as Channel);
+        }
+        window.history.replaceState({}, "", "/");
+      }
+    } catch {}
+  }, []);
+
+  // Persist name and amount to localStorage on change
+  useEffect(() => {
+    try {
+      if (name.trim()) localStorage.setItem("donatelko_name", name.trim());
+      if (amount > 0) localStorage.setItem("donatelko_amount", String(amount));
+    } catch {}
+  }, [name, amount]);
 
   useEffect(() => {
     fetch("/api/rates", { cache: "no-store" })
@@ -89,11 +125,24 @@ export default function HomePage() {
       recorderRef.current = recorder;
       startedAtRef.current = Date.now();
       recorder.onstop = () => {
-        setVoiceSeconds(Math.max(1, Math.round((Date.now() - startedAtRef.current) / 1000)));
+        setVoiceSeconds(Math.max(1, Math.min(MAX_VOICE_SECONDS, Math.round((Date.now() - startedAtRef.current) / 1000))));
         stream.getTracks().forEach((track) => track.stop());
+        if (voiceTimerRef.current) {
+          clearInterval(voiceTimerRef.current);
+          voiceTimerRef.current = null;
+        }
       };
       recorder.start();
       setRecording(true);
+
+      // Auto-stop at MAX_VOICE_SECONDS
+      voiceTimerRef.current = setInterval(() => {
+        const elapsed = Math.round((Date.now() - startedAtRef.current) / 1000);
+        if (elapsed >= MAX_VOICE_SECONDS) {
+          recorder.stop();
+          setRecording(false);
+        }
+      }, 500);
     } catch {
       setError("Немає доступу до мікрофона.");
     }
@@ -103,6 +152,10 @@ export default function HomePage() {
     if (!recorderRef.current || !recording) return;
     recorderRef.current.stop();
     setRecording(false);
+    if (voiceTimerRef.current) {
+      clearInterval(voiceTimerRef.current);
+      voiceTimerRef.current = null;
+    }
   }
 
   async function onSubmit(event: FormEvent) {
@@ -142,6 +195,17 @@ export default function HomePage() {
       setError(data.error || "Не вдалося створити чек.");
       return;
     }
+    // Save form state to localStorage for restoration if check expires
+    try {
+      localStorage.setItem("donatelko_form", JSON.stringify({
+        name: name.trim(),
+        amount,
+        message: message.trim(),
+        youtubeUrl: youtubeUrl.trim(),
+        channel,
+      }));
+    } catch {}
+
     router.push(`/check/${data.data.id}`);
   }
 
@@ -268,7 +332,7 @@ export default function HomePage() {
               </label>
 
               <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                <p className="text-sm text-amber-50/70">Запис голосу</p>
+                <p className="text-sm text-amber-50/70">Запис голосу <span className="text-amber-50/40">(макс. {MAX_VOICE_SECONDS} сек.)</span></p>
                 <div className="mt-2 flex items-center gap-2">
                   {!recording ? (
                     <button
@@ -276,19 +340,21 @@ export default function HomePage() {
                       onClick={startRecord}
                       className="rounded-lg border border-amber-300/40 px-3 py-1.5 text-xs text-amber-100 hover:bg-amber-300/10"
                     >
-                      Почати
+                      🎤 Почати
                     </button>
                   ) : (
                     <button
                       type="button"
                       onClick={stopRecord}
-                      className="rounded-lg border border-red-300/40 px-3 py-1.5 text-xs text-red-100 hover:bg-red-300/10"
+                      className="rounded-lg border border-red-300/40 px-3 py-1.5 text-xs text-red-100 hover:bg-red-300/10 animate-pulse"
                     >
-                      Зупинити
+                      ⏹ Зупинити
                     </button>
                   )}
                   {voiceSeconds > 0 ? (
-                    <span className="text-xs text-amber-50/70">Запис: {voiceSeconds} сек.</span>
+                    <span className="text-xs text-amber-50/70">🎤 Запис: {voiceSeconds} сек.</span>
+                  ) : recording ? (
+                    <span className="text-xs text-red-300">Запис...</span>
                   ) : (
                     <span className="text-xs text-amber-50/50">Можна додати до чека</span>
                   )}

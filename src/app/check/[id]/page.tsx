@@ -83,7 +83,7 @@ export default function CheckPage({ params }: { params: { id: string } }) {
   useEffect(() => {
     if (isExpired) {
       setInfoMessage("Час вийшов. Повертаємось назад...");
-      const t = setTimeout(() => router.push("/"), 3000);
+      const t = setTimeout(() => router.push("/?restore=1"), 3000);
       return () => clearTimeout(t);
     }
   }, [isExpired, router]);
@@ -91,6 +91,11 @@ export default function CheckPage({ params }: { params: { id: string } }) {
   useEffect(() => {
     if (isPaid) {
       setInfoMessage("Оплату підтверджено! Дякуємо за донат.");
+      // Clear form data except name on successful payment
+      try {
+        localStorage.removeItem("donatelko_form");
+        localStorage.removeItem("donatelko_amount");
+      } catch {}
     }
   }, [isPaid]);
 
@@ -178,7 +183,18 @@ export default function CheckPage({ params }: { params: { id: string } }) {
         {/* Check Details */}
         <section className="dashboard-card mt-4 p-5">
           {!check ? (
-            <p className="text-sm text-amber-50/70">{infoMessage || "Завантаження..."}</p>
+            <div>
+              <p className="text-sm text-amber-50/70">{infoMessage || "Завантаження..."}</p>
+              {isError && (
+                <button
+                  type="button"
+                  onClick={() => router.push("/")}
+                  className="mt-4 flex h-12 w-full items-center justify-center rounded-xl border border-amber-300/40 bg-amber-400/15 text-sm font-semibold text-amber-200 transition hover:bg-amber-400/25"
+                >
+                  ← Назад
+                </button>
+              )}
+            </div>
           ) : (
             <>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -196,6 +212,29 @@ export default function CheckPage({ params }: { params: { id: string } }) {
                 <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
                   <p className="text-[10px] uppercase tracking-wider text-amber-50/50">Повідомлення</p>
                   <p className="mt-1 text-sm">{check.message}</p>
+                </div>
+              )}
+
+              {check.youtubeUrl && (
+                <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-amber-50/50">YouTube</p>
+                  <a
+                    href={check.youtubeUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 block truncate text-sm text-amber-300 underline hover:text-amber-200"
+                  >
+                    {check.youtubeUrl}
+                  </a>
+                </div>
+              )}
+
+              {check.voiceUrl && (
+                <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-amber-50/50">Голосове повідомлення</p>
+                  <p className="mt-1 text-sm text-amber-200">
+                    🎤 {check.voiceUrl.replace("voice:", "").replace("s", " сек.")}
+                  </p>
                 </div>
               )}
 
@@ -234,14 +273,14 @@ export default function CheckPage({ params }: { params: { id: string } }) {
                 </button>
               </div>
 
-              {check.channel === "UAH" && showButtons && (
+              {showButtons && (
                 <button
                   type="button"
-                  onClick={() => verifyCheck({ allowAnonymousOnFail: true })}
+                  onClick={cancelCheckAndBack}
                   disabled={processing}
                   className="mt-2 w-full rounded-xl border border-amber-300/30 bg-amber-400/10 py-2.5 text-sm text-amber-200 transition hover:bg-amber-400/15 disabled:opacity-50"
                 >
-                  Відправити анонімно (без коду)
+                  Закрити чек
                 </button>
               )}
 
